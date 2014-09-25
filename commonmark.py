@@ -299,7 +299,7 @@ class InlineParser(Dumper):
 
 
 
-    def parseEscaped(self, inlines):
+    def parse_escaped(self, inlines):
         """
         Parse a backslash-escaped special character, adding either the escaped
         character, a hard line break (if the backslash is followed by a newline),
@@ -591,7 +591,7 @@ class InlineParser(Dumper):
                 nest_level -= 1
                 self.pos += 1
             elif c == '\\':
-                self.parseEscaped([])
+                self.parse_escaped([])
             else:
                 self.parse_string([])
             c = self.peek()
@@ -799,7 +799,7 @@ class InlineParser(Dumper):
         if c == '\n':
             r = self.parse_newline(inlines)
         elif c == '\\':
-            r = self.parseEscaped(inlines)
+            r = self.parse_escaped(inlines)
         elif c == '`':
             r = self.parse_backticks(inlines)
         elif c == '*' or c == '_':
@@ -1134,7 +1134,7 @@ class DocParser(Dumper):
                     container = self.add_child('ATXHeader', line_number, first_nonspace)
                     container.level = len(match.group(0).strip())  # Numver of #'s
                     # Remove trailing #'s
-                    container.strings = [re.sub(r'(?:(\\#) *#*| *#+) *$', '\g<1>', line[offset:])]
+                    container.strings = [re.sub(r'(.*?)(?: *(?<!\\)#*)*$', '\g<1>', line[offset:])]
                     break
 
                 else:
