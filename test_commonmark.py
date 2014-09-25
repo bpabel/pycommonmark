@@ -16,6 +16,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-s', '--stop', action='store_true')
     parser.add_argument('-v', '--verbose', action='store_true')
+    parser.add_argument('-t', '--test', type=int, default=None)
     args = parser.parse_args()
 
     writer = commonmark.HtmlRenderer()
@@ -36,7 +37,7 @@ def main():
     regex = re.compile(r'^\.\n(?P<markdown>[\s\S]*?)^\.\n(?P<html>[\s\S]*?)^\.$|^#{1,6} *(?P<section>.*)$', flags=re.M)
 
     tests = []
-    test_number = 0
+    test_number = 1
     current_section = None
     for match in regex.finditer(text):
         if match.group('section'):
@@ -61,6 +62,10 @@ def main():
     cnt = len(tests)
     current_section = None
     for test in tests:
+        number = test['number']
+        if args.test is not None and number != args.test:
+            continue
+
         section = test['section']
         if section != current_section:
             print('SECTION: {0}'.format(section))
@@ -69,7 +74,7 @@ def main():
         markdown = test['markdown']
         html = test['html']
         try:
-            actual = writer.renderBlock(reader.parse(markdown))
+            actual = writer.render_block(reader.parse(markdown))
         except Exception:
             actual = None
             tmsg = traceback.format_exc()
@@ -78,10 +83,10 @@ def main():
 
         if actual == html:
             passed += 1
-            print('{0} of {1}: PASS'.format(test['number'] + 1, cnt))
+            print('TEST {0} of {1}: PASS'.format(number, cnt))
         else:
             failed += 1
-            print('{0} of {1}: FAIL'.format(test['number'] + 1, cnt))
+            print('TEST {0} of {1}: FAIL'.format(number, cnt))
             if args.verbose:
                 print('.')
                 print(markdown.encode('ascii', errors='replace'))
@@ -94,6 +99,7 @@ def main():
                     print(tmsg)
 
             if args.stop:
+                print('DUMP')
                 pprint(reader.dump())
                 return None
 

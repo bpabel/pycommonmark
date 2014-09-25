@@ -156,13 +156,13 @@ def unescape(s):
     return reAllEscapedChar.sub('$1', s)
 
 
-def isBlank(s):
+def is_blank(s):
     """ Returns true if string contains only space characters.
     """
     return bool(re.match(r'^\s*$', s))
 
 
-def normalizeReference(s):
+def normalize_reference(s):
     """ 
     Normalize reference label: collapse internal whitespace
     to single space, remove leading/trailing whitespace, case fold.
@@ -171,7 +171,7 @@ def normalizeReference(s):
     return re.sub(r'\s+', ' ', s.strip()).upper()
 
 
-def matchAt(regex, s, offset):
+def match_at(regex, s, offset):
     """
     Attempt to match a regex in string s at offset offset.
     Return index of match or null.
@@ -183,7 +183,7 @@ def matchAt(regex, s, offset):
     return None
 
 
-def detabLine(text):
+def detab_line(text):
     """ Convert tabs to spaces on each line using a 4-space tab stop.
     """
     if '\t' not in text:
@@ -198,7 +198,7 @@ def detabLine(text):
         return re.sub(r'\t', repl, text)
 
 
-def parseRawLabel(s):
+def parse_raw_label(s):
     """
     Parse raw link label, including surrounding [], and return
     inline contents.  (Note:  this is not a method of InlineParser.)
@@ -209,6 +209,9 @@ def parseRawLabel(s):
     return InlineParser().parse(s[1:-2], {})
 
 
+def splice(inlist, index):
+    while len(inlist) > index:
+        inlist.pop()
 
 
 
@@ -259,7 +262,7 @@ class InlineParser(Dumper):
         self.match(re.compile(r'^ *(?:\n *)?'))
         return 1
 
-    def parseBackticks(self, inlines):
+    def parse_backticks(self, inlines):
         """
         All of the parsers below try to match something at the current position
         in the subject.  If they succeed in matching anything, they
@@ -323,7 +326,7 @@ class InlineParser(Dumper):
             return 0
 
 
-    def parseAutolink(self, inlines):
+    def parse_autolink(self, inlines):
         """ Attempt to parse an autolink (URL or email in pointy brackets).        
         """
         dest = None
@@ -377,7 +380,7 @@ class InlineParser(Dumper):
             else:
                 return 0
 
-    def parseHtmlTag(self, inlines):
+    def parse_html_tag(self, inlines):
         """ Attempt to parse a raw HTML tag.
         """
         m = self.match(reHtmlTag)
@@ -388,7 +391,7 @@ class InlineParser(Dumper):
             return 0
 
 
-    def scanDelims(self, c):
+    def scan_delims(self, c):
         """
         Scan a sequence of characters == c, and return information about
         the number of delimiters and whether they are positioned such that
@@ -412,12 +415,11 @@ class InlineParser(Dumper):
             can_open = can_open and not re.search(r'[a-z0-9]', char_before, re.I)
             can_close = can_close and not re.search(r'[a-z0-9]', char_after, re.I)
 
+        # Rewind pos.
         self.pos = startpos
         return {'numdelims': numdelims, 'can_open': can_open, 'can_close': can_close}
 
-
-
-    def parseEmphasis(self, inlines):
+    def parse_emphasis(self, inlines):
         """
         Attempt to parse emphasis or strong emphasis in an efficient way,
         with no backtracking.
@@ -434,7 +436,7 @@ class InlineParser(Dumper):
             return 0
 
         # Get opening delimiters.
-        res = self.scanDelims(c)
+        res = self.scan_delims(c)
         self.pos += res['numdelims']
 
         # We provisionally add a literal string.  If we match appropriate
@@ -442,7 +444,7 @@ class InlineParser(Dumper):
         inlines.append(Inline(t='Str', c=self.subject[self.pos - res['numdelims']:self.pos]))
 
         # Record the position of this opening delimiter
-        delimpos = len(inlines)  # + 1
+        delimpos = len(inlines) - 1
 
         if not res['can_open'] or res['numdelims'] == 0:
             return 0
@@ -451,32 +453,35 @@ class InlineParser(Dumper):
 
         if res['numdelims'] == 1:
             while True:
-                res = self.scanDelims(c)
+                res = self.scan_delims(c)
+#                 pprint([i.dump() for i in inlines])
+#                 print 'RES', pformat(res)
                 if res['numdelims'] >= 1 and res['can_close']:
                     self.pos += 1
                     # Convert the inline at delimpos, currently a string with the delim,
                     # into an Emph whose contents are the succeeding inlines.
-                    inlines[delimpos].t = 'Strong'
+                    inlines[delimpos].t = 'Emph'
                     inlines[delimpos].c = inlines[delimpos + 1:]
-                    inlines = inlines[:delimpos + 1]
+                    splice(inlines, delimpos + 1)
                     break
                 else:
-                    if self.parseInline(inlines) == 0:
+                    if self.parse_inline(inlines) == 0:
                         break
-
+#             print 'END'
+#             pprint([i.dump() for i in inlines])
             return self.pos - startpos
 
         elif res['numdelims'] == 2:  # We started with ** or __
             while True:
-                res = self.scanDelims(c)
+                res = self.scan_delims(c)
                 if res['numdelims'] >= 2 and res['can_close']:
                     self.pos += 2
                     inlines[delimpos].t = 'Strong'
                     inlines[delimpos].c = inlines[delimpos + 1:]
-                    inlines = inlines[:delimpos + 1]
+                    splice(inlines, delimpos + 1)
                     break
                 else:
-                    if self.parseInline(inlines) == 0:
+                    if self.parse_inline(inlines) == 0:
                         break
 
             return self.pos - startpos
@@ -484,7 +489,7 @@ class InlineParser(Dumper):
 
         elif res['numdelims'] == 3:
             while True:
-                res = self.scanDelims(c)
+                res = self.scan_delims(c)
                 if res['numdelims'] >= 1 and res['numdelims'] <= 3 and res['can_close'] and res['numdelims'] != first_close_delims:
                     if first_close_delims == 1 and res['numdelims'] > 2:
                         res['numdelims'] = 2
@@ -513,17 +518,17 @@ class InlineParser(Dumper):
                         first_close = len(inlines) - 1
                         first_close_delims = res['numdelims']
                 else:
-                    if self.parseInline(inlines) == 0:
+                    if self.parse_inline(inlines) == 0:
                         break
 
             return self.pos - startpos
 
         else:
-            return res
+            return 1
 
         return 0
 
-    def parseLinkTitle(self):
+    def parse_link_title(self):
         """
         Attempt to parse link title (sans quotes), returning the string
         or null if no match.
@@ -536,7 +541,7 @@ class InlineParser(Dumper):
         else:
             return None
 
-    def parseLinkDescription(self):
+    def parse_link_description(self):
         """
         Attempt to parse link destination, returning the string or
         null if no match.
@@ -552,7 +557,7 @@ class InlineParser(Dumper):
             else:
                 return None
 
-    def parseLinkLabel(self):
+    def parse_link_label(self):
         """
         Attempt to parse a link label, returning number of characters parsed.
         
@@ -576,9 +581,9 @@ class InlineParser(Dumper):
         c = self.peek()
         while c and (c != ']' or nest_level > 0):
             if c == '`':
-                self.parseBackticks([])
+                self.parse_backticks([])
             elif c == '<':
-                self.parseAutolink([]) or self.parseHtmlTag([]) or self.parseString([])
+                self.parse_autolink([]) or self.parse_html_tag([]) or self.parse_string([])
             elif c == '[':  # Nested []
                 nest_level += 1
                 self.pos += 1
@@ -588,7 +593,7 @@ class InlineParser(Dumper):
             elif c == '\\':
                 self.parseEscaped([])
             else:
-                self.parseString([])
+                self.parse_string([])
             c = self.peek()
 
         if c == ']':
@@ -602,12 +607,12 @@ class InlineParser(Dumper):
             return 0
 
 
-    def parseLink(self, inlines):
+    def parse_link(self, inlines):
         """ Attempt to parse a link.  If successful, add the link to inlines.
         """
         startpos = self.pos
 
-        n = self.parseLinkLabel()
+        n = self.parse_link_label()
         if n == 0:
             return 0
 
@@ -623,14 +628,14 @@ class InlineParser(Dumper):
                     # Make sure there's a space before the title
                     match = re.search(r'^\s', self.subject[self.pos - 1])
                     if match:
-                        title = self.parseLinkTitle() or ''
+                        title = self.parse_link_title() or ''
                         if self.spnl() and self.match(re.compile(r'^\)')):
                             inlines.append(
                                 Inline(
                                     t='Link',
                                     destination=dest,
                                     title=title,
-                                    label=parseRawLabel(rawlabel),
+                                    label=parse_raw_label(rawlabel),
                                 )
                             )
                             return self.pos - startpos
@@ -643,7 +648,7 @@ class InlineParser(Dumper):
         savepos = self.pos
         self.spnl()
         beforelabel = self.pos
-        n = self.parseLinkLabel()
+        n = self.parse_link_label()
         if n == 2:
             # Empty second label.
             reflabel = rawlabel
@@ -654,14 +659,14 @@ class InlineParser(Dumper):
             reflabel = rawlabel
 
         # Lookup rawlabel in refmap
-        link = self.refmap[normalizeReference(reflabel)]
+        link = self.refmap[normalize_reference(reflabel)]
         if link:
             inlines.append(
                 Inline(
                     t='Link',
                     destination=link.destination,
                     title=link.title,
-                    label=parseRawLabel(rawlabel),
+                    label=parse_raw_label(rawlabel),
                 )
             )
             return self.pos - startpos
@@ -674,7 +679,7 @@ class InlineParser(Dumper):
         self.pos = startpos
         return 0
 
-    def parseEntity(self, inlines):
+    def parse_entity(self, inlines):
         """ Attempt to parse an entity, adding to inlines if successful.
         """
         m = self.match(re.compile(r'^&(?:#x[a-f0-9]{1,8}|#[0-9]{1,8}|[a-z][a-z0-9]{1,31})', re.I))
@@ -684,7 +689,7 @@ class InlineParser(Dumper):
         else:
             return 0
 
-    def parseString(self, inlines):
+    def parse_string(self, inlines):
         """
         Parse a run of ordinary characters, or a single character with
         a special meaning in markdown, as a plain string, adding to inlines.
@@ -697,7 +702,7 @@ class InlineParser(Dumper):
         else:
             return 0
 
-    def parseNewline(self, inlines):
+    def parse_newline(self, inlines):
         """
         Parse a newline.  If it was preceded by two spaces, return a hard
         line break otherwise a soft line break.
@@ -719,14 +724,14 @@ class InlineParser(Dumper):
             return 0
 
 
-    def parseImage(self, inlines):
+    def parse_image(self, inlines):
         """
         Attempt to parse an image.  If the opening '!' is not followed
         by a link, add a literal '!' to inlines.
         
         """
         if self.match(re.compile(r'^!')):
-            n = self.parseLink(inlines)
+            n = self.parse_link(inlines)
             if n == 0:
                 inlines.append(Inline(t='Str', c='!'))
                 return 1
@@ -739,7 +744,7 @@ class InlineParser(Dumper):
         else:
             return 0
 
-    def parseReference(self, s, refmap):
+    def parse_reference(self, s, refmap):
         """ Attempt to parse a link reference, modifying refmap.
         """
         self.subject = s
@@ -747,7 +752,7 @@ class InlineParser(Dumper):
         startpos = self.pos
 
         # Label
-        match_chars = self.parseLinkLabel()
+        match_chars = self.parse_link_label()
         if match_chars == 0:
             return 0
         else:
@@ -763,55 +768,52 @@ class InlineParser(Dumper):
         # Link URL
         self.spnl()
 
-        dest = self.parseLinkDescription()
+        dest = self.parse_link_description()
         if not dest:
             self.pos = startpos
             return 0
 
         beforetitle = self.pos
         self.spnl()
-        title = self.parseLinkTitle()
+        title = self.parse_link_title()
         if title is None:
             title = ''
             # Rewind before spaces
             self.pos = beforetitle
 
-        normlabel = normalizeReference(rawlabel)
+        normlabel = normalize_reference(rawlabel)
 
         if normlabel not in refmap:
             refmap[normlabel] = Inline(destination=dest, title=title)
 
         return self.pos - startpos
 
-    def parseInline(self, inlines):
+    def parse_inline(self, inlines):
         """
         Parse the next inline element in subject, advancing subject position
         and adding the result to 'inlines'.        
         
         """
         c = self.peek()
-        res = None
+        r = None
         if c == '\n':
-            res = self.parseNewline(inlines)
+            r = self.parse_newline(inlines)
         elif c == '\\':
-            res = self.parseEscaped(inlines)
+            r = self.parseEscaped(inlines)
         elif c == '`':
-            res = self.parseBackticks(inlines)
+            r = self.parse_backticks(inlines)
         elif c == '*' or c == '_':
-            res = self.parseEmphasis(inlines)
+            r = self.parse_emphasis(inlines)
         elif c == '[':
-            res = self.parseLink(inlines)
+            r = self.parse_link(inlines)
         elif c == '!':
-            res = self.parseImage(inlines)
+            r = self.parse_image(inlines)
         elif c == '<':
-            res = self.parseAutolink(inlines) or self.parseHtmlTag(inlines)
+            r = self.parse_autolink(inlines) or self.parse_html_tag(inlines)
         elif c == '&':
-            res = self.parseEntity(inlines)
+            r = self.parse_entity(inlines)
 
-        return res or self.parseString(inlines)
-
-
-
+        return r or self.parse_string(inlines)
 
     def parse(self, s, refmap):
         """ Parse s as a list of inlines, using refmap to resolve references.
@@ -820,7 +822,7 @@ class InlineParser(Dumper):
         self.pos = 0
         self.refmap = refmap or {}
         inlines = []
-        while self.parseInline(inlines):
+        while self.parse_inline(inlines):
             pass
         return inlines
 
@@ -924,7 +926,7 @@ class DocParser(Dumper):
         self.inlineParser = InlineParser()
         self.top = 0
 
-    def breakOutOfLists(self, block, line_number):
+    def break_out_of_lists(self, block, line_number):
         """
         Break out of all containing lists, resetting the tip of the
         document to the parent of the highest list, and finalizing
@@ -952,7 +954,7 @@ class DocParser(Dumper):
 
 
 
-    def addLine(self, line, offset):
+    def add_line(self, line, offset):
         """
         Add a line to the block at the tip.  We assume the tip
         can accept lines -- that check should be done before calling this.
@@ -963,7 +965,7 @@ class DocParser(Dumper):
             raise ParseError('Attempted to add line ({0}) to closed container.'.format(line))
         self.tip.strings.append(s)
 
-    def addChild(self, tag, line_number, offset):
+    def add_child(self, tag, line_number, offset):
         """
         Add block of type tag as a child of the tip.  If the tip can't
         accept children, close and finalize it and try its parent,
@@ -980,7 +982,7 @@ class DocParser(Dumper):
         self.tip = new_block
         return new_block
 
-    def incorporateLine(self, line, line_number):
+    def incorporate_line(self, line, line_number):
         """
         Analyze a line of text and update the document appropriately.
         We parse markdown text by calling this on each line of input,
@@ -995,7 +997,7 @@ class DocParser(Dumper):
         blank = False
 
         # Convert tabs to spaces.
-        line = detabLine(line)
+        line = detab_line(line)
 
         # For each containing block, try to parse the associated line start.
         # Bail out on failure: container will point to the last matching block.
@@ -1006,7 +1008,7 @@ class DocParser(Dumper):
                 break
             container = last_child
 
-            match = matchAt(re.compile(r'[^ ]'), line, offset)
+            match = match_at(re.compile(r'[^ ]'), line, offset)
             if match is None:
                 first_nonspace = len(line)
                 blank = True
@@ -1085,14 +1087,14 @@ class DocParser(Dumper):
 
         # Check to see if we've hit 2nd blank line, if so break out of list.
         if blank and container.last_line_blank:
-            self.breakOutOfLists(container, line_number)
+            self.break_out_of_lists(container, line_number)
 
         # Unless last matched container is a code block, try new container starts,
         # adding children to the last matched container.
         while (container.t not in ['FencedCode', 'IndentedCode', 'HtmlBlock'] and
-               matchAt(re.compile(r'^[ #`~*+_=<>0-9-]'), line, offset) is not None):
+               match_at(re.compile(r'^[ #`~*+_=<>0-9-]'), line, offset) is not None):
 
-            match = matchAt(re.compile(r'[^ ]'), line, offset)
+            match = match_at(re.compile(r'[^ ]'), line, offset)
             if match is None:
                 first_nonspace = len(line)
                 blank = True
@@ -1108,7 +1110,7 @@ class DocParser(Dumper):
                     offset += CODE_INDENT
                     closeUnmatchedBlocks(self)
                     oldtip = closeUnmatchedBlocks.oldtip
-                    container = self.addChild('IndentedCode', line_number, offset)
+                    container = self.add_child('IndentedCode', line_number, offset)
                 else:  # Indent > 4 in a lazy paragraph continuation.
                     break
 
@@ -1120,7 +1122,7 @@ class DocParser(Dumper):
                     offset += 1
                 closeUnmatchedBlocks(self)
                 oldtip = closeUnmatchedBlocks.oldtip
-                container = self.addChild('BlockQuote', line_number, offset)
+                container = self.add_child('BlockQuote', line_number, offset)
 
             else:
                 match = re.match(r'^#{1,6}(?: +|$)', line[first_nonspace:])
@@ -1129,7 +1131,7 @@ class DocParser(Dumper):
                     offset = first_nonspace + len(match.group(0))
                     closeUnmatchedBlocks(self)
                     oldtip = closeUnmatchedBlocks.oldtip
-                    container = self.addChild('ATXHeader', line_number, first_nonspace)
+                    container = self.add_child('ATXHeader', line_number, first_nonspace)
                     container.level = len(match.group(0).strip())  # Numver of #'s
                     # Remove trailing #'s
                     container.strings = [re.sub(r'(?:(\\#) *#*| *#+) *$', '\g<1>', line[offset:])]
@@ -1142,18 +1144,18 @@ class DocParser(Dumper):
                         fence_length = len(match.group(0))
                         closeUnmatchedBlocks(self)
                         oldtip = closeUnmatchedBlocks.oldtip
-                        container = self.addChild('FencedCode', line_number, first_nonspace)
+                        container = self.add_child('FencedCode', line_number, first_nonspace)
                         container.fence_length = fence_length
                         container.fence_char = match.group(0)[0]
                         container.fence_offset = first_nonspace - offset
                         offset = first_nonspace + fence_length
                         break
 
-                    elif matchAt(reHtmlBlockOpen, line, first_nonspace) is not None:
+                    elif match_at(reHtmlBlockOpen, line, first_nonspace) is not None:
                         # Html block
                         closeUnmatchedBlocks(self)
                         oldtip = closeUnmatchedBlocks.oldtip
-                        container = self.addChild('HtmlBlock', line_number, first_nonspace)
+                        container = self.add_child('HtmlBlock', line_number, first_nonspace)
                         # Note, we don't adjsut offset because the tag is part of the text
                         break
 
@@ -1167,11 +1169,11 @@ class DocParser(Dumper):
                             container.level = 1 if match.group(0)[0] == '=' else 2
                             offset = len(line)
 
-                        elif matchAt(reHrule, line, first_nonspace) is not None:
+                        elif match_at(reHrule, line, first_nonspace) is not None:
                             # Hrule
                             closeUnmatchedBlocks(self)
                             oldtip = closeUnmatchedBlocks.oldtip
-                            container = self.addChild('HorizontalRule', line_number, first_nonspace)
+                            container = self.add_child('HorizontalRule', line_number, first_nonspace)
                             offset = len(line) - 1
                             break
 
@@ -1186,11 +1188,11 @@ class DocParser(Dumper):
 
                                 # Add the list if needed
                                 if container.t != 'List' or not listsMatch(container.list_data, data):
-                                    container = self.addChild('List', line_number, first_nonspace)
+                                    container = self.add_child('List', line_number, first_nonspace)
                                     container.list_data = data
 
                                 # Add the list item
-                                container = self.addChild('ListItem', line_number, first_nonspace)
+                                container = self.add_child('ListItem', line_number, first_nonspace)
                                 container.list_data = data
 
                             else:
@@ -1202,7 +1204,7 @@ class DocParser(Dumper):
 
         # What remains at the offset is a text line.  Add the text to the
         # appropriate container.
-        match = matchAt(re.compile(r'[^ ]'), line, offset)
+        match = match_at(re.compile(r'[^ ]'), line, offset)
         if match is None:
             first_nonspace = len(line)
             blank = True
@@ -1215,7 +1217,7 @@ class DocParser(Dumper):
         if self.tip != last_matched_container and not blank and self.tip.t == 'Paragraph' and self.tip.strings:
             # Laxy paragraph continuation
             self.last_line_blank = False
-            self.addLine(line, offset)
+            self.add_line(line, offset)
 
         else:
             # Not a lay continuation
@@ -1240,7 +1242,7 @@ class DocParser(Dumper):
                 cont = cont.parent
 
             if container.t in ['IndentedCode', 'HtmlBlock']:
-                self.addLine(line, offset)
+                self.add_line(line, offset)
 
             elif container.t == 'FencedCode':
                 # Check for closing code fence.
@@ -1249,20 +1251,20 @@ class DocParser(Dumper):
                     # Don't add closing fence to container instead, close it.
                     self.finalize(container, line_number)
                 else:
-                    self.addLine(line, offset)
+                    self.add_line(line, offset)
 
             elif container.t in ['ATXHeader', 'SetextHeader', 'HorizontalRule']:
                 # Nothing to do we already added the contents
                 pass
             else:
                 if acceptsLines(container.t):
-                    self.addLine(line, first_nonspace)
+                    self.add_line(line, first_nonspace)
                 elif blank:
                     pass
                 elif container.t not in ['HorizontalRule', 'SetextHeader']:
                     # Create Paragraph container for line.
-                    container = self.addChild('Paragraph', line_number, first_nonspace)
-                    self.addLine(line, first_nonspace)
+                    container = self.add_child('Paragraph', line_number, first_nonspace)
+                    self.add_line(line, first_nonspace)
                 else:
                     logger.warning('Line {0} with container type {1} did not match any condition.'.format(line_number, container.t))
 
@@ -1289,13 +1291,13 @@ class DocParser(Dumper):
         if block.t == 'Paragraph':
             block.string_content = re.sub(r'^  *', '', '\n'.join(block.strings), re.M)
             # Try parsing the beginning as link reference definitions.
-            pos = self.inlineParser.parseReference(block.string_content, self.refmap)
+            pos = self.inlineParser.parse_reference(block.string_content, self.refmap)
             while block.string_content[0] == '[' and pos:
                 block.string_content = block.string_content[pos:]
-                if isBlank(block.string_content):
+                if is_blank(block.string_content):
                     block.t = 'ReferenceDef'
                     break
-                pos = self.inlineParser.parseReference(block.string_content, self.refmap)
+                pos = self.inlineParser.parse_reference(block.string_content, self.refmap)
 
         elif block.t in ['ATXHeader', 'SetextHeader', 'HtmlBlock']:
             block.string_content = '\n'.join(block.strings)
@@ -1334,7 +1336,7 @@ class DocParser(Dumper):
 
         self.tip = block.parent or self.top
 
-    def processInlines(self, block):
+    def process_inlines(self, block):
         """
         Walk through a block & children recursively, parsing string content
         into inline content where appropriate.
@@ -1348,7 +1350,7 @@ class DocParser(Dumper):
 
         if block.children:
             for child in block.children:
-                self.processInlines(child)
+                self.process_inlines(child)
 
     def parse(self, text):
         """ The main parsing function.  Returns a parsed document AST.
@@ -1358,10 +1360,12 @@ class DocParser(Dumper):
         self.refmap = dict()
         lines = re.split(r'\r\n|\n|\r', re.sub(r'\n$', '', text))
         for i, line in enumerate(lines):
-            self.incorporateLine(line, i + 1)
+            self.incorporate_line(line, i + 1)
         while self.tip:
             self.finalize(self.tip, len(lines) - 1)
-        self.processInlines(self.doc)
+#         print 'PREINLINE'
+#         pprint(self.doc.dump())
+        self.process_inlines(self.doc)
         return self.doc
 
 
@@ -1374,7 +1378,7 @@ class HtmlRenderer(Dumper):
         self.softbreak = '\n'
 
     @staticmethod
-    def inTags(tag, attrs, contents, selfclosing=False):
+    def in_tags(tag, attrs, contents, selfclosing=False):
         result = '<' + tag
         if attrs:
             for attr in attrs:
@@ -1404,7 +1408,7 @@ class HtmlRenderer(Dumper):
             s = re.sub(r'["]', '&quote', s)
             return s
 
-    def renderInline(self, inline):
+    def render_inline(self, inline):
         """ Render an inline element as HTML.
         """
         attrs = None
@@ -1413,11 +1417,11 @@ class HtmlRenderer(Dumper):
         elif inline.t == 'Softbreak':
             return self.softbreak
         elif inline.t == 'Hardbreak':
-            return self.inTags('br', [], "", True) + '\n'
+            return self.in_tags('br', [], "", True) + '\n'
         elif inline.t == 'Emph':
-            return self.inTags('em', [], self.renderInlines(inline.c))
+            return self.in_tags('em', [], self.render_inlines(inline.c))
         elif inline.t == 'Strong':
-            return self.inTags('strong', [], self.renderInlines(inline.c))
+            return self.in_tags('strong', [], self.render_inlines(inline.c))
         elif inline.t == 'Html':
             return inline.c
         elif inline.t == 'Entity':
@@ -1426,30 +1430,30 @@ class HtmlRenderer(Dumper):
             attrs = [['href', self.escape(inline.destination, True)]]
             if inline.title:
                 attrs.append(['title', self.escape(inline.title, True)])
-            return self.inTags('a', attrs, self.renderInlines(inline.label))
+            return self.in_tags('a', attrs, self.render_inlines(inline.label))
         elif inline.t == 'Image':
             attrs = [
                 ['src', self.escape(inline.destination, True)],
-                ['alt', self.escape(self.renderInlines(inline.label))],
+                ['alt', self.escape(self.render_inlines(inline.label))],
             ]
             if inline.title:
                 attrs.append(['title', self.escape(inline.title, True)])
-            return self.inTags('img', attrs, "", True)
+            return self.in_tags('img', attrs, "", True)
         elif inline.t == 'Code':
-            return self.inTags('code', [], self.escape(inline.c))
+            return self.in_tags('code', [], self.escape(inline.c))
         else:
             logger.warning('Unknown inline type: {}'.format(inline.t))
             return ''
 
-    def renderInlines(self, inlines):
+    def render_inlines(self, inlines):
         """ Render a list of inlines.
         """
         result = []
         for inline in inlines:
-            result.append(self.renderInline(inline))
+            result.append(self.render_inline(inline))
         return ''.join(result)
 
-    def renderBlock(self, block, in_tight_list=False):
+    def render_block(self, block, in_tight_list=False):
         """ Render a single block element.
         """
         tag = None
@@ -1457,22 +1461,22 @@ class HtmlRenderer(Dumper):
         info_words = None
 
         if block.t == 'Document':
-            whole_doc = self.renderBlocks(block.children)
+            whole_doc = self.render_blocks(block.children)
             return '' if whole_doc == '' else whole_doc + '\n'
 
         elif block.t == 'Paragraph':
             if in_tight_list:
-                return self.renderInlines(block.inline_content)
+                return self.render_inlines(block.inline_content)
             else:
-                return self.inTags('p', [], self.renderInlines(block.inline_content))
+                return self.in_tags('p', [], self.render_inlines(block.inline_content))
 
         elif block.t == 'BlockQuote':
-            filling = self.renderBlocks(block.children)
+            filling = self.render_blocks(block.children)
             filling = self.innersep if filling == '' else self.innersep + filling + self.innersep
-            return self.inTags('blockquote', [], filling)
+            return self.in_tags('blockquote', [], filling)
 
         elif block.t == 'ListItem':
-            return self.inTags('li', [], self.renderBlocks(block.children, in_tight_list).strip())
+            return self.in_tags('li', [], self.render_blocks(block.children, in_tight_list).strip())
 
         elif block.t == 'List':
             tag = 'ul' if block.list_data.type == 'Bullet' else 'ol'
@@ -1481,16 +1485,16 @@ class HtmlRenderer(Dumper):
             else:
                 attr = [['start', block.list_data.start.toString()]]
 
-            return self.inTags(tag, attr, self.innersep +
-                          self.renderBlocks(block.children, block.tight) +
+            return self.in_tags(tag, attr, self.innersep +
+                          self.render_blocks(block.children, block.tight) +
                           self.innersep)
 
         elif block.t in ['ATXHeader', 'SetextHeader']:
-            tag = 'h' + block.level
-            return self.inTags(tag, [], self.renderInlines(block.inline_content))
+            tag = 'h{}'.format(block.level)
+            return self.in_tags(tag, [], self.render_inlines(block.inline_content))
 
         elif block.t == 'IndentedCode':
-            return self.inTags('pre', [], self.inTags('code', [], self.escape(block.string_content)))
+            return self.in_tags('pre', [], self.in_tags('code', [], self.escape(block.string_content)))
 
         elif block.t == 'FencedCode':
             info_words = re.split(r' +', block.info)
@@ -1498,7 +1502,7 @@ class HtmlRenderer(Dumper):
                 attr = []
             else:
                 attr = [['class', 'language-' + self.escape(info_words[0], True)]]
-            return self.inTags('pre', [], self.inTags('code', attr, self.escape(block.string_content)))
+            return self.in_tags('pre', [], self.in_tags('code', attr, self.escape(block.string_content)))
 
         elif block.t == 'HtmlBlock':
             return block.string_content
@@ -1507,30 +1511,18 @@ class HtmlRenderer(Dumper):
             return ""
 
         elif block.t == 'HorizontalRule':
-            return self.inTags('hr', [], "", True)
+            return self.in_tags('hr', [], "", True)
 
         else:
             logger.warning('Unknown block type: {}'.format(block.t))
             return ''
 
-
-
-
-    def renderBlocks(self, blocks, in_tight_list=False):
+    def render_blocks(self, blocks, in_tight_list=False):
         """ Render a list of block elements, separated by this.blocksep.
         """
         result = []
         for block in blocks:
-            r = self.renderBlock(block, in_tight_list)
-            if isinstance(r, list):
-                print 'LIST RESULT'
-                print '------------'
-                pprint(block.dump())
-                print '------------'
-                pprint(r)
-                print '------------'
-            result.append(r)
-            # result.append(self.renderBlock(block, in_tight_list))
+            result.append(self.render_block(block, in_tight_list))
         return self.blocksep.join(result)
 
 
