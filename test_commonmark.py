@@ -11,6 +11,44 @@ from pprint import pprint, pformat
 import commonmark
 
 
+def print_exc_plus():
+    """
+    Print the usual traceback information, followed by a listing of all the
+    local variables in each frame.
+    """
+    msg = []
+    tb = sys.exc_info()[2]
+    while 1:
+        if not tb.tb_next:
+            break
+        tb = tb.tb_next
+    stack = []
+    f = tb.tb_frame
+    stack.append(f)
+#     while f:
+#         stack.append(f)
+#         f = f.f_back
+    stack.reverse()
+    msg.append(traceback.format_exc())
+    msg.append("Locals by frame, innermost last")
+    for frame in stack:
+        msg.append('')
+        msg.append("Frame %s in %s at line %s" % (frame.f_code.co_name,
+                                             frame.f_code.co_filename,
+                                             frame.f_lineno))
+        for key, value in frame.f_locals.items():
+            # We have to be careful not to cause a new error in our error
+            # printer! Calling str() on an unknown object could cause an
+            # error we don't want.
+            try:
+                msg.append("\t%20s = %r" % (key, value))
+            except:
+                msg.append("{} = <ERROR WHILE PRINTING VALUE>".format(key))
+
+    return '\n'.join(msg)
+
+
+
 def main():
 
     parser = argparse.ArgumentParser()
@@ -77,7 +115,8 @@ def main():
             actual = writer.render_block(reader.parse(markdown))
         except Exception:
             actual = None
-            tmsg = traceback.format_exc()
+            tmsg = print_exc_plus()
+            tmsg = tmsg.encode('ascii', errors='replace')
         else:
             tmsg = None
 
@@ -97,6 +136,11 @@ def main():
                 print('.')
                 if tmsg:
                     print(tmsg)
+
+                with open(r'C:\temp\commonmark_actual.txt', 'w') as f:
+                    f.write(actual.encode('utf8'))
+                with open(r'C:\temp\commonmark_html.txt', 'w') as f:
+                    f.write(html.encode('utf8'))
 
             if args.stop:
                 print('DUMP')
